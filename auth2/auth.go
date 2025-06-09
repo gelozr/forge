@@ -34,8 +34,8 @@ func (a *Manager) Authenticate(ctx context.Context, creds any) (any, error) {
 	return a.MustHandler(a.defaultHandler).Authenticate(ctx, creds)
 }
 
-func (a *Manager) Validate(ctx context.Context, payload any) (Verified[any], error) {
-	return a.MustHandler(a.defaultHandler).Validate(ctx, payload)
+func (a *Manager) Validate(ctx context.Context, proof any) (Verified[any], error) {
+	return a.MustHandler(a.defaultHandler).Validate(ctx, proof)
 }
 
 func (a *Manager) Login(ctx context.Context, user any) (any, error) {
@@ -96,7 +96,7 @@ func (a *Manager) MustHandler(name string) AnyHandler {
 	panic(fmt.Sprintf("DefaultAuth '%s' not found", name))
 }
 
-func (a *Manager) Extend(name string, option GuardOption[any, any, any]) error {
+func (a *Manager) Extend(name string, option HandlerOption) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -140,15 +140,19 @@ func (a *Manager) SetDefaultGuard(name string) error {
 	return nil
 }
 
+type HandlerOption struct {
+	Driver       Driver[any, any]
+	UserProvider UserProvider[any, any]
+}
+
 type ctxKey string
 
 var userCtxKey = ctxKey("user")
 
-func WithUserCtx(ctx context.Context, user User) context.Context {
+func WithUserCtx(ctx context.Context, user any) context.Context {
 	return context.WithValue(ctx, userCtxKey, user)
 }
 
-func UserFromCtx(ctx context.Context) (User, bool) {
-	u, ok := ctx.Value(userCtxKey).(User)
-	return u, ok
+func UserFromCtx(ctx context.Context) any {
+	return ctx.Value(userCtxKey)
 }

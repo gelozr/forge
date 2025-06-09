@@ -2,11 +2,6 @@ package auth2
 
 import "context"
 
-type GuardOption[C, U, P any] struct {
-	Driver       Driver[U, P]
-	UserProvider UserProvider[C, U]
-}
-
 type DefaultAuth[C, U, P any] struct {
 	driver       Driver[U, P]
 	userProvider UserProvider[C, U]

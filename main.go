@@ -13,13 +13,13 @@ type User struct {
 
 type sampleUserProvider struct{}
 
-func (s sampleUserProvider) FindByCredentials(ctx context.Context, c auth2.Credentials) (any, error) {
+func (s sampleUserProvider) FindByCredentials(ctx context.Context, c any) (any, error) {
 	return &User{ID: "123"}, nil
 }
 
 type sampleDriver struct{}
 
-func (s sampleDriver) Validate(ctx context.Context, payload any) (auth2.Verified[any], error) {
+func (s sampleDriver) Validate(ctx context.Context, proof any) (auth2.Verified[any], error) {
 	return auth2.Verified[any]{User: &User{ID: "234"}, Permissions: []string{"*"}}, nil
 }
 
@@ -41,7 +41,7 @@ type verifiedUser struct {
 
 type typedDriver struct{}
 
-func (s typedDriver) Validate(ctx context.Context, payload string) (auth2.Verified[User], error) {
+func (s typedDriver) Validate(ctx context.Context, proof string) (auth2.Verified[User], error) {
 	return auth2.Verified[User]{User: User{ID: "234"}}, nil
 }
 
@@ -61,7 +61,7 @@ func (s sessionDriver) Logout(ctx context.Context, sessionID string) error {
 
 func main() {
 	auth := auth2.New()
-	option := auth2.GuardOption[any, any, any]{
+	option := auth2.HandlerOption[any, any, any]{
 		Driver:       sampleDriver{},
 		UserProvider: sampleUserProvider{},
 	}

@@ -4,27 +4,22 @@ import (
 	"context"
 )
 
-type Credentials = interface{}
-type User = interface{}
-type Payload = interface{}
-type LoginID = interface{}
-
 type Verified[U any] struct {
 	User        U
 	Permissions []string
-}
-
-type UserProvider[C, U any] interface {
-	FindByCredentials(ctx context.Context, creds C) (U, error)
 }
 
 type Driver[U, P any] interface {
 	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
+type UserProvider[C, U any] interface {
+	FindByCredentials(ctx context.Context, creds C) (U, error)
+}
+
 type Handler[C, U, P any] interface {
 	Authenticate(ctx context.Context, creds C) (U, error)
-	Validate(ctx context.Context, payload P) (Verified[U], error)
+	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
 type Authenticator[C, U any] interface {
@@ -32,7 +27,7 @@ type Authenticator[C, U any] interface {
 }
 
 type Validator[U, P any] interface {
-	Validate(ctx context.Context, payload P) (Verified[U], error)
+	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
 type LoginHandler[U, R any] interface {
@@ -59,7 +54,7 @@ type AnyHandler = Handler[any, any, any]
 
 type Auth interface {
 	Authenticate(ctx context.Context, creds any) (any, error)
-	Validate(ctx context.Context, payload any) (Verified[any], error)
+	Validate(ctx context.Context, proof any) (Verified[any], error)
 	Login(ctx context.Context, user any) (any, error)
 	Logout(ctx context.Context, id any) error
 	IssueToken(ctx context.Context, user any) (any, error)

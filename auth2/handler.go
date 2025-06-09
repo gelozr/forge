@@ -16,8 +16,8 @@ func (g *handler) Authenticate(ctx context.Context, creds any) (any, error) {
 	return user, nil
 }
 
-func (g *handler) Validate(ctx context.Context, payload any) (Verified[any], error) {
-	verified, err := g.driver.Validate(ctx, payload)
+func (g *handler) Validate(ctx context.Context, proof any) (Verified[any], error) {
+	verified, err := g.driver.Validate(ctx, proof)
 	if err != nil {
 		return Verified[any]{}, err
 	}

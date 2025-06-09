@@ -20,7 +20,7 @@ var _ AnyHandler = (*SessionAuth[any, any, any])(nil)
 var _ LoginHandler[any, any] = (*SessionAuth[any, any, any])(nil)
 var _ LogoutHandler[any] = (*SessionAuth[any, any, any])(nil)
 
-func NewSessionAuth[C, U, P any, D SessionDriver[U, P], UP UserProvider[C, U]](driver D, userProvider UP) *SessionAuth[C, U, P] {
+func NewSessionAuth[C, U, P any](driver SessionDriver[U, P], userProvider UserProvider[C, U]) *SessionAuth[C, U, P] {
 	return &SessionAuth[C, U, P]{
 		DefaultAuth: DefaultAuth[C, U, P]{
 			userProvider: userProvider,
