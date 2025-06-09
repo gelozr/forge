@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gelozr/forge/auth"
+	"github.com/gelozr/himo/auth"
 )
 
 type MockUser struct {
@@ -167,7 +167,7 @@ func TestProvider_MustGuard(t *testing.T) {
 	a = withDefaultGuard(t, a, "mock")
 
 	g := a.MustGuard("mock")
-	user, err := g.Authenticate(context.Background(), any("creds"))
+	user, err := g.Authenticate(context.Background(), "creds")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestProvider_Guard(t *testing.T) {
 			}
 
 			if !tt.wantErr {
-				user, err := g.Authenticate(context.Background(), any("creds"))
+				user, err := g.Authenticate(context.Background(), "creds")
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -253,7 +253,7 @@ func TestProvider_Authenticate(t *testing.T) {
 			a := newTestAuth(t, "mock", tt.userProvider, &MockDriver{})
 			a = withDefaultGuard(t, a, "mock")
 
-			user, err := a.Authenticate(context.Background(), any("creds"))
+			user, err := a.Authenticate(context.Background(), "creds")
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("expected error: %v, got: %v", tt.wantErr, err)

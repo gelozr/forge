@@ -22,6 +22,7 @@ type Driver interface {
 type TokenIssuer interface {
 	IssueToken(ctx context.Context, user User) (any, error)
 }
+
 type TokenRefresher interface {
 	RefreshToken(ctx context.Context, refreshToken string) (any, error)
 }
