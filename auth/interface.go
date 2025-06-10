@@ -4,59 +4,67 @@ import (
 	"context"
 )
 
-type Credentials interface{}
-
-type User interface {
-	UserID() any
+type Verified[U any] struct {
+	User        U
+	Permissions []string
 }
 
-type UserProvider interface {
-	FindByCredentials(context.Context, Credentials) (User, error)
+type Driver[U, P any] interface {
+	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
-type Driver interface {
-	// Validate verifies the payload or token signature of its specific driver
-	Validate(ctx context.Context, payload any) (Verified, error)
+type UserProvider[C, U any] interface {
+	FindByCredentials(ctx context.Context, creds C) (U, error)
 }
 
-type TokenIssuer interface {
-	IssueToken(ctx context.Context, user User) (any, error)
+type UserRegisterer[U any] interface {
+	Register(context.Context, U) (U, error)
 }
 
-type TokenRefresher interface {
-	RefreshToken(ctx context.Context, refreshToken string) (any, error)
+type Handler[C, U, P any] interface {
+	Authenticate(ctx context.Context, creds C) (U, error)
+	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
-type Authenticator interface {
-	Authenticate(ctx context.Context, creds Credentials) (User, error)
+type Authenticator[C, U any] interface {
+	Authenticate(ctx context.Context, creds C) (U, error)
 }
 
-type LoginHandler interface {
-	Login(ctx context.Context, user User) (any, error)
+type Validator[U, P any] interface {
+	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
-type LogoutHandler interface {
-	Logout(ctx context.Context, id any) error
+type LoginHandler[U, R any] interface {
+	Login(ctx context.Context, user U) (R, error)
 }
 
-type Checker interface {
-	Check(ctx context.Context, payload any) (Verified, error)
+type LogoutHandler[P any] interface {
+	Logout(context.Context, P) error
 }
 
-type Guard interface {
-	Authenticate(ctx context.Context, creds Credentials) (User, error)
-	Login(ctx context.Context, user User) (any, error)
-	Logout(ctx context.Context, id any) error
-	Check(ctx context.Context, payload any) (Verified, error)
-	RefreshToken(ctx context.Context, refreshToken string) (any, error)
+type TokenIssuer[U, P any] interface {
+	IssueToken(ctx context.Context, user U) (P, error)
 }
+
+type TokenRefresher[P any] interface {
+	RefreshToken(ctx context.Context, refreshToken string) (P, error)
+}
+
+type TokenRevoker interface {
+	RevokeToken(ctx context.Context, token string) error
+}
+
+type AnyHandler = Handler[any, any, any]
 
 type Auth interface {
-	Authenticate(ctx context.Context, creds Credentials) (User, error)
-	Login(ctx context.Context, user User) (any, error)
+	Register(ctx context.Context, user any) (any, error)
+	Authenticate(ctx context.Context, creds any) (any, error)
+	Validate(ctx context.Context, proof any) (Verified[any], error)
+	Login(ctx context.Context, user any) (any, error)
 	Logout(ctx context.Context, id any) error
-	Check(ctx context.Context, payload any) (Verified, error)
+	IssueToken(ctx context.Context, user any) (any, error)
 	RefreshToken(ctx context.Context, refreshToken string) (any, error)
-	Guard(string) (Guard, error)
-	MustGuard(string) Guard
+	RevokeToken(ctx context.Context, token string) error
+	Handler(string) (AnyHandler, error)
+	MustHandler(string) AnyHandler
 }

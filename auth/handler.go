@@ -1,10 +1,19 @@
-package auth2
+package auth
 
 import "context"
 
 type handler struct {
 	driver       Driver[any, any]
 	userProvider UserProvider[any, any]
+}
+
+var _ UserRegisterer[any] = (*handler)(nil)
+
+func (g *handler) Register(ctx context.Context, user any) (any, error) {
+	if d, ok := g.userProvider.(UserRegisterer[any]); ok {
+		return d.Register(ctx, user)
+	}
+	return nil, ErrUserRegisterNotSupported
 }
 
 func (g *handler) Authenticate(ctx context.Context, creds any) (any, error) {

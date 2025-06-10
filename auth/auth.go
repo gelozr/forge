@@ -8,131 +8,113 @@ import (
 )
 
 var (
+	ErrUserRegisterNotSupported = errors.New("user registration not supported")
 	ErrLoginNotSupported        = errors.New("login not supported")
 	ErrLogoutNotSupported       = errors.New("logout not supported")
+	ErrIssueTokenNotSupported   = errors.New("issue token not supported")
 	ErrRefreshTokenNotSupported = errors.New("refresh token not supported")
+	ErrRevokeTokenNotSupported  = errors.New("revoke token not supported")
 )
 
-type Verified struct {
-	ctx    context.Context
-	User   User
-	Scopes []string
+type Manager struct {
+	mu             sync.RWMutex
+	handlers       map[string]AnyHandler
+	defaultHandler string
 }
 
-func (v Verified) Context() context.Context {
-	return v.ctx
-}
+var _ Auth = (*Manager)(nil)
 
-type GuardOption struct {
-	Driver       Driver
-	UserProvider UserProvider
-}
-
-type guard struct {
-	userProvider UserProvider
-	driver       Driver
-}
-
-var _ Guard = (*guard)(nil)
-
-func (g guard) Authenticate(ctx context.Context, creds Credentials) (User, error) {
-	user, err := g.userProvider.FindByCredentials(ctx, creds)
-	if err != nil {
-		return nil, err
+func New() *Manager {
+	m := &Manager{
+		handlers:       make(map[string]AnyHandler),
+		defaultHandler: "default",
 	}
 
-	return user, nil
+	h := &handler{
+		driver:       NewJWTDriver(),
+		userProvider: NewMemoryUserProvider(),
+	}
+
+	m.handlers[m.defaultHandler] = h
+
+	return m
 }
 
-func (g guard) Login(ctx context.Context, user User) (any, error) {
-	if d, ok := g.driver.(LoginHandler); ok {
-		return d.Login(ctx, user)
+func (a *Manager) Register(ctx context.Context, user any) (any, error) {
+	if h, ok := a.MustHandler(a.defaultHandler).(UserRegisterer[any]); ok {
+		return h.Register(ctx, user)
 	}
+
+	return nil, ErrUserRegisterNotSupported
+}
+
+func (a *Manager) Authenticate(ctx context.Context, creds any) (any, error) {
+	return a.MustHandler(a.defaultHandler).Authenticate(ctx, creds)
+}
+
+func (a *Manager) Validate(ctx context.Context, proof any) (Verified[any], error) {
+	return a.MustHandler(a.defaultHandler).Validate(ctx, proof)
+}
+
+func (a *Manager) Login(ctx context.Context, user any) (any, error) {
+	if h, ok := a.MustHandler(a.defaultHandler).(LoginHandler[any, any]); ok {
+		return h.Login(ctx, user)
+	}
+
 	return nil, ErrLoginNotSupported
 }
 
-func (g guard) Logout(ctx context.Context, id any) error {
-	if d, ok := g.driver.(LogoutHandler); ok {
-		return d.Logout(ctx, id)
+func (a *Manager) Logout(ctx context.Context, id any) error {
+	if h, ok := a.MustHandler(a.defaultHandler).(LogoutHandler[any]); ok {
+		return h.Logout(ctx, id)
 	}
+
 	return ErrLogoutNotSupported
 }
 
-func (g guard) Check(ctx context.Context, payload any) (Verified, error) {
-	verified, err := g.driver.Validate(ctx, payload)
-	if err != nil {
-		return Verified{}, err
+func (a *Manager) IssueToken(ctx context.Context, user any) (any, error) {
+	if h, ok := a.MustHandler(a.defaultHandler).(TokenIssuer[any, any]); ok {
+		return h.IssueToken(ctx, user)
 	}
-
-	verified.ctx = WithUserCtx(ctx, verified.User)
-
-	return verified, nil
+	return nil, ErrIssueTokenNotSupported
 }
 
-func (g guard) RefreshToken(ctx context.Context, refreshToken string) (any, error) {
-	if d, ok := g.driver.(TokenRefresher); ok {
-		return d.RefreshToken(ctx, refreshToken)
+func (a *Manager) RefreshToken(ctx context.Context, refreshToken string) (any, error) {
+	if h, ok := a.MustHandler(a.defaultHandler).(TokenRefresher[any]); ok {
+		return h.RefreshToken(ctx, refreshToken)
 	}
 	return nil, ErrRefreshTokenNotSupported
 }
 
-type Provider struct {
-	mu           sync.RWMutex
-	guards       map[string]*guard
-	defaultGuard string
-}
-
-var _ Auth = (*Provider)(nil)
-
-func New() *Provider {
-	return &Provider{
-		guards:       make(map[string]*guard),
-		defaultGuard: "",
+func (a *Manager) RevokeToken(ctx context.Context, token string) error {
+	if h, ok := a.MustHandler(a.defaultHandler).(TokenRevoker); ok {
+		return h.RevokeToken(ctx, token)
 	}
+	return ErrRevokeTokenNotSupported
 }
 
-func (a *Provider) Authenticate(ctx context.Context, creds Credentials) (User, error) {
-	return a.MustGuard(a.defaultGuard).Authenticate(ctx, creds)
-}
-
-func (a *Provider) Login(ctx context.Context, user User) (any, error) {
-	return a.MustGuard(a.defaultGuard).Login(ctx, user)
-}
-
-func (a *Provider) Logout(ctx context.Context, id any) error {
-	return a.MustGuard(a.defaultGuard).Logout(ctx, id)
-}
-
-func (a *Provider) Check(ctx context.Context, payload any) (Verified, error) {
-	return a.MustGuard(a.defaultGuard).Check(ctx, payload)
-}
-
-func (a *Provider) RefreshToken(ctx context.Context, refreshToken string) (any, error) {
-	return a.MustGuard(a.defaultGuard).RefreshToken(ctx, refreshToken)
-}
-
-func (a *Provider) Guard(name string) (Guard, error) {
+func (a *Manager) Handler(name string) (AnyHandler, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if g, ok := a.guards[name]; ok {
+	if g, ok := a.handlers[name]; ok {
 		return g, nil
 	}
 	return nil, fmt.Errorf("guard '%s' not found", name)
 }
 
-func (a *Provider) MustGuard(name string) Guard {
+func (a *Manager) MustHandler(name string) AnyHandler {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if g, ok := a.guards[name]; ok {
+	if g, ok := a.handlers[name]; ok {
 		return g
 	}
 
-	panic(fmt.Sprintf("guard '%s' not found", name))
+	panic(fmt.Sprintf("DefaultAuth '%s' not found", name))
 }
 
-func (a *Provider) Extend(name string, option GuardOption) error {
+func (a *Manager) Extend(name string, option HandlerOption) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -140,11 +122,15 @@ func (a *Provider) Extend(name string, option GuardOption) error {
 		panic("UserProvider or Driver cannot be nil")
 	}
 
-	if a.guards == nil {
-		a.guards = make(map[string]*guard)
+	if a.handlers == nil {
+		a.handlers = make(map[string]AnyHandler)
 	}
 
-	a.guards[name] = &guard{
+	if len(a.handlers) == 0 {
+		a.defaultHandler = name
+	}
+
+	a.handlers[name] = &handler{
 		userProvider: option.UserProvider,
 		driver:       option.Driver,
 	}
@@ -152,35 +138,39 @@ func (a *Provider) Extend(name string, option GuardOption) error {
 	return nil
 }
 
-func (a *Provider) HasGuard(name string) bool {
+func (a *Manager) HasHandler(name string) bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	_, ok := a.guards[name]
+	_, ok := a.handlers[name]
 	return ok
 }
 
-func (a *Provider) SetDefaultGuard(name string) error {
+func (a *Manager) SetDefaultGuard(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if _, ok := a.guards[name]; !ok {
+	if _, ok := a.handlers[name]; !ok {
 		return fmt.Errorf("guard '%s' not found", name)
 	}
 
-	a.defaultGuard = name
+	a.defaultHandler = name
 	return nil
+}
+
+type HandlerOption struct {
+	Driver       Driver[any, any]
+	UserProvider UserProvider[any, any]
 }
 
 type ctxKey string
 
 var userCtxKey = ctxKey("user")
 
-func WithUserCtx(ctx context.Context, user User) context.Context {
+func WithUserCtx(ctx context.Context, user any) context.Context {
 	return context.WithValue(ctx, userCtxKey, user)
 }
 
-func UserFromCtx(ctx context.Context) (User, bool) {
-	u, ok := ctx.Value(userCtxKey).(User)
-	return u, ok
+func UserFromCtx(ctx context.Context) any {
+	return ctx.Value(userCtxKey)
 }
