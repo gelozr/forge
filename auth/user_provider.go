@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/google/uuid"
 )
 
 var (
@@ -15,21 +13,22 @@ var (
 	ErrIncorrectPassword = errors.New("incorrect password")
 )
 
-func uniqid() string {
-	return uuid.NewString()
-}
-
+// User represents a basic user record for MemoryUserProvider.
 type User struct {
 	ID       string
 	Email    string
 	Password string
 }
 
+// PasswordCredentials is a simple email/password credential struct.
 type PasswordCredentials struct {
 	Email    string
 	Password string
 }
 
+// MemoryUserProvider is an in-memory, demo/test only UserProvider.
+// It stores users keyed by email and implements FindByCredentials
+// to satisfy AnyHandler’s dynamic handler model.
 type MemoryUserProvider struct {
 	mu    sync.RWMutex
 	users map[string]*User
@@ -38,12 +37,16 @@ type MemoryUserProvider struct {
 var _ UserProvider[any, any] = (*MemoryUserProvider)(nil)
 var _ UserRegisterer[any] = (*MemoryUserProvider)(nil)
 
+// NewMemoryUserProvider creates an empty in-memory provider.
+// Intended for testing or demos; not for production use.
 func NewMemoryUserProvider() *MemoryUserProvider {
 	return &MemoryUserProvider{
 		users: make(map[string]*User),
 	}
 }
 
+// FindByCredentials looks up a user by email/password.
+// Expects credentials of type PasswordCredentials, returns any to fit AnyHandler.
 func (p *MemoryUserProvider) FindByCredentials(ctx context.Context, credentials any) (any, error) {
 	creds, ok := credentials.(PasswordCredentials)
 	if !ok {
@@ -62,6 +65,7 @@ func (p *MemoryUserProvider) FindByCredentials(ctx context.Context, credentials 
 	return u, nil
 }
 
+// GetByEmail returns the user with the given email or ErrUserNotFound.
 func (p *MemoryUserProvider) GetByEmail(email string) (*User, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -72,6 +76,8 @@ func (p *MemoryUserProvider) GetByEmail(email string) (*User, error) {
 	return nil, ErrUserNotFound
 }
 
+// Register creates a new user with a generated ID and stores it in memory.
+// Expects user of type *User, returns any to satisfy AnyHandler.
 func (p *MemoryUserProvider) Register(ctx context.Context, user any) (any, error) {
 	u, ok := user.(*User)
 	if !ok {
