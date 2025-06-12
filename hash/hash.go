@@ -4,89 +4,204 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/alexedwards/argon2id"
+	"golang.org/x/crypto/bcrypt"
 )
 
-type Driver string
+var (
+	ErrHasherNotFound = errors.New("hasher not found")
+)
+
+type Method string
 
 const (
-	Bcrypt   = Driver("bcrypt")
-	Argon2ID = Driver("argon2id")
+	Bcrypt   Method = "bcrypt"
+	Argon2ID Method = "argon2id"
 )
 
+// Hasher performs one-way password hashing and verification.
 type Hasher interface {
 	Hash(password string) (string, error)
 	Check(password, hash string) (bool, error)
 }
 
-type Hash interface {
-	Hasher
-	RegisterHasher(d Driver, hasher Hasher) error
+// Provider looks up a Hasher by Method.
+type Provider interface {
+	Hasher(Method) (Hasher, error)
+
+	// MustHasher returns the Hasher for the given Method or panics if not found.
+	MustHasher(Method) Hasher
 }
 
+// Manager is a thread-safe implementation of Provider with default and custom hashers.
 type Manager struct {
 	mu            sync.RWMutex
-	hashers       map[Driver]Hasher
-	defaultDriver Driver
+	hashers       map[Method]Hasher
+	defaultHasher Method
 }
 
-func NewManager() *Manager {
-	hashers := make(map[Driver]Hasher)
-	hashers[Bcrypt] = NewBcryptHasher()
-	hashers[Argon2ID] = NewArgon2IDHasher()
-
-	return &Manager{
-		hashers:       hashers,
-		defaultDriver: Bcrypt,
+// New returns a Manager pre-configured with Bcrypt and Argon2ID hashers.
+func New() *Manager {
+	m := &Manager{
+		hashers:       make(map[Method]Hasher),
+		defaultHasher: Bcrypt,
 	}
+
+	m.hashers[Bcrypt] = BcryptHasher{}
+	m.hashers[Argon2ID] = Argon2IDHasher{}
+
+	return m
 }
 
-func (m *Manager) getHasher(driver Driver) (Hasher, error) {
+// Hash generates a password hash using the default Method.
+func (m *Manager) Hash(password string) (string, error) {
+	return m.MustHasher(m.defaultHasher).Hash(password)
+}
+
+// Check verifies a password against a hash using the default Method.
+func (m *Manager) Check(password, hash string) (bool, error) {
+	return m.MustHasher(m.defaultHasher).Check(password, hash)
+}
+
+// Hasher looks up a Hasher by Method. Returns ErrHasherNotFound if missing.
+func (m *Manager) Hasher(mt Method) (Hasher, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if hasher, ok := m.hashers[driver]; ok {
+	if hasher, ok := m.hashers[mt]; ok {
 		return hasher, nil
 	}
-	return nil, fmt.Errorf("hasher not found for driver %s", driver)
+
+	return nil, fmt.Errorf("%w: %s", ErrHasherNotFound, mt)
 }
 
-func (m *Manager) RegisterHasher(d Driver, hasher Hasher) error {
+// MustHasher returns a Hasher for the Method or panics if not registered.
+func (m *Manager) MustHasher(mt Method) Hasher {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if hasher, ok := m.hashers[mt]; ok {
+		return hasher
+	}
+
+	panic(fmt.Sprintf("hasher '%s' not found", mt))
+}
+
+// Extend registers a new Hasher under the given Method, overwriting if existing.
+func (m *Manager) Extend(mt Method, hasher Hasher) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	_, ok := m.hashers[d]
-	if ok {
-		return errors.New("hash driver already registered")
-	}
-
-	m.hashers[d] = hasher
+	m.hashers[mt] = hasher
 	return nil
 }
 
-// Hash hashes a plaintext
-func (m *Manager) Hash(password string) (string, error) {
-	hasher, err := m.getHasher(m.defaultDriver)
-	if err != nil {
-		return "", fmt.Errorf("get hasher: %w", err)
+// SetDefault changes the default Method used by Hash and Check.
+// Returns ErrHasherNotFound if the Method is not registered.
+func (m *Manager) SetDefault(mt Method) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.hashers[mt]; !ok {
+		return fmt.Errorf("%w: %s", ErrHasherNotFound, mt)
 	}
 
-	return hasher.Hash(password)
+	m.defaultHasher = mt
+	return nil
 }
 
-// Check checks if the given password matches the hashed password
-func (m *Manager) Check(password, hash string) (bool, error) {
-	hasher, err := m.getHasher(m.defaultDriver)
+var (
+	once          sync.Once
+	defaultHasher *Manager
+)
+
+// getManager initializes and returns a package-level singleton Manager.
+func getManager() *Manager {
+	once.Do(func() {
+		defaultHasher = New()
+	})
+	return defaultHasher
+}
+
+// Hash is a facade that hashes using the default Method.
+func Hash(password string) (string, error) {
+	return getManager().Hash(password)
+}
+
+// Check is a facade that verifies a hash using the default Method.
+func Check(password, hash string) (bool, error) {
+	return getManager().Check(password, hash)
+}
+
+// LookupHasher looks up a Hasher by Method in the package-level Manager.
+func LookupHasher(mt Method) (Hasher, error) {
+	return getManager().Hasher(mt)
+}
+
+// MustHasher returns a Hasher for the Method or panics if not found.
+func MustHasher(mt Method) Hasher {
+	return getManager().MustHasher(mt)
+}
+
+// Extend registers a new Hasher under the given Method at the package level.
+func Extend(mt Method, h Hasher) error {
+	return getManager().Extend(mt, h)
+}
+
+// SetDefault sets the default Method used by package-level Hash and Check.
+func SetDefault(mt Method) error {
+	return getManager().SetDefault(mt)
+}
+
+// BcryptHasher implements Hasher using the bcrypt algorithm.
+type BcryptHasher struct{}
+
+var _ Hasher = BcryptHasher{}
+
+// Hash returns the bcrypt hash of the password using DefaultCost.
+func (BcryptHasher) Hash(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return false, fmt.Errorf("get hasher: %w", err)
+		return "", fmt.Errorf("bcrypt hash: %v", err)
+	}
+	return string(bytes), nil
+}
+
+// Check compares a plaintext password against a bcrypt hash.
+func (BcryptHasher) Check(password, hash string) (bool, error) {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	if err != nil {
+		switch {
+		case errors.Is(err, bcrypt.ErrMismatchedHashAndPassword):
+			return false, nil
+		default:
+			return false, fmt.Errorf("bcrypt compare password hash: %w", err)
+		}
 	}
 
-	return hasher.Check(password, hash)
+	return true, nil
 }
 
-// func getDefaultDriver(cfg *config.Config) Driver {
-// 	defaultHasher := Bcrypt
-// 	if cfg.HashingDriver != "" {
-// 		defaultHasher = Driver(cfg.HashingDriver)
-// 	}
-// 	return defaultHasher
-// }
+// Argon2IDHasher implements Hasher using the argon2id algorithm.
+type Argon2IDHasher struct{}
+
+var _ Hasher = Argon2IDHasher{}
+
+// Hash returns the argon2id hash of the password using DefaultParams.
+func (Argon2IDHasher) Hash(password string) (string, error) {
+	s, err := argon2id.CreateHash(password, argon2id.DefaultParams)
+	if err != nil {
+		return "", fmt.Errorf("argon hash: %w", err)
+	}
+	return s, nil
+}
+
+// Check compares a plaintext password against an argon2id hash.
+func (Argon2IDHasher) Check(password, hash string) (bool, error) {
+	ok, err := argon2id.ComparePasswordAndHash(password, hash)
+	if err != nil {
+		return false, fmt.Errorf("argon compare password hash: %w", err)
+	}
+	return ok, nil
+}
