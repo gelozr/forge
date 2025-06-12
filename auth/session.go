@@ -19,7 +19,7 @@ var (
 // U is the user type; P is the proof type used by Validate (often string).
 // Login must return a session ID (string), and Logout removes that session.
 type SessionDriver[U, P any] interface {
-	Driver[U, P] // Validate(ctx, proof P) -> Verified[U]
+	Validator[U, P] // Validate(ctx, proof P) -> Verified[U]
 	Login(ctx context.Context, user U) (string, error)
 	Logout(ctx context.Context, sessionID string) error
 }

@@ -10,7 +10,7 @@ import "context"
 // U - User type
 // P - Proof type (e.g., token, session ID)
 type BaseAuth[C, U, P any] struct {
-	driver       Driver[U, P]       // Responsible for validating the proof (e.g., token/session ID)
+	driver       Validator[U, P]    // Responsible for validating the proof (e.g., token/session ID)
 	userProvider UserProvider[C, U] // Responsible for locating and authenticating users by credentials
 }
 
@@ -18,7 +18,7 @@ var _ AnyHandler = (*BaseAuth[any, any, any])(nil)
 
 // NewBaseAuth creates a new BaseAuth instance with the provided
 // user provider and driver.
-func NewBaseAuth[C, U, P any](userProvider UserProvider[C, U], driver Driver[U, P]) *BaseAuth[C, U, P] {
+func NewBaseAuth[C, U, P any](userProvider UserProvider[C, U], driver Validator[U, P]) *BaseAuth[C, U, P] {
 	return &BaseAuth[C, U, P]{
 		driver:       driver,
 		userProvider: userProvider,
@@ -32,7 +32,7 @@ func (a *BaseAuth[C, U, P]) Authenticate(ctx context.Context, creds C) (U, error
 }
 
 // Validate checks the authenticity of a proof (e.g., token/session ID)
-// and returns the verified user context. Delegates to the Driver.
+// and returns the verified user context. Delegates to the Validator.
 func (a *BaseAuth[C, U, P]) Validate(ctx context.Context, proof P) (Verified[U], error) {
 	return a.driver.Validate(ctx, proof)
 }

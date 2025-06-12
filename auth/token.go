@@ -16,9 +16,9 @@ var (
 
 // TokenDriver defines the contract for token-based authentication drivers.
 // U is the user type, P is the token type (e.g., string or JWT container).
-// Drivers must implement Validate (from Driver), and IssueToken to generate tokens.
+// Drivers must implement Validate (from Validator), and IssueToken to generate tokens.
 type TokenDriver[U, P any] interface {
-	Driver[U, P]
+	Validator[U, P]
 	IssueToken(ctx context.Context, user U) (P, error)
 }
 
@@ -43,7 +43,7 @@ var (
 )
 
 // NewTokenAuth constructs a new TokenAuth with the given TokenDriver and UserProvider.
-func NewTokenAuth[C, U, P any](driver TokenDriver[U, P], userProvider UserProvider[C, U]) *TokenAuth[C, U, P] {
+func NewTokenAuth[C, U, P any, D TokenDriver[U, P], UP UserProvider[C, U]](driver D, userProvider UP) *TokenAuth[C, U, P] {
 	return &TokenAuth[C, U, P]{
 		BaseAuth: BaseAuth[C, U, P]{userProvider: userProvider},
 		driver:   driver,
@@ -93,8 +93,8 @@ type JWTDriver struct {
 	verifyKey []byte
 }
 
-// Compile-time checks that JWTDriver implements the Driver and TokenIssuer interfaces.
-var _ Driver[any, any] = (*JWTDriver)(nil)
+// Compile-time checks that JWTDriver implements the Validator and TokenIssuer interfaces.
+var _ Validator[any, any] = (*JWTDriver)(nil)
 var _ TokenIssuer[any, any] = (*JWTDriver)(nil)
 
 // NewJWTDriver creates a JWTDriver with a default HMAC verify key.
@@ -168,7 +168,7 @@ func (d *JWTDriver) IssueToken(ctx context.Context, usr any) (any, error) {
 }
 
 // Validate parses and validates the JWT, returning a Verified[any] with the user.
-// Implements the Driver interface.
+// Implements the Validator interface.
 func (d *JWTDriver) Validate(ctx context.Context, proof any) (Verified[any], error) {
 	token, ok := proof.(string)
 	if !ok {

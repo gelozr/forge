@@ -11,20 +11,21 @@ type Verified[U any] struct {
 	Permissions []string
 }
 
-// Driver defines a component capable of validating a proof (e.g., token, session ID)
-// and returning a verified user context.
-type Driver[U, P any] interface {
-	Validate(ctx context.Context, proof P) (Verified[U], error)
-}
-
 // UserProvider represents a user lookup service using provided credentials.
 type UserProvider[C, U any] interface {
 	FindByCredentials(ctx context.Context, creds C) (U, error)
 }
 
-// UserRegisterer defines a contract for registering new users.
-type UserRegisterer[U any] interface {
-	Register(context.Context, U) (U, error)
+// Authenticator defines a single responsibility interface for authenticating users
+// using provided credentials.
+type Authenticator[C, U any] interface {
+	Authenticate(ctx context.Context, creds C) (U, error)
+}
+
+// Validator defines a component capable of validating a proof (e.g., token, session ID)
+// and returning a verified user context.
+type Validator[U, P any] interface {
+	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
 // Handler is a generic interface that combines authentication and validation
@@ -34,15 +35,9 @@ type Handler[C, U, P any] interface {
 	Validate(ctx context.Context, proof P) (Verified[U], error)
 }
 
-// Authenticator defines a single responsibility interface for authenticating users
-// using provided credentials.
-type Authenticator[C, U any] interface {
-	Authenticate(ctx context.Context, creds C) (U, error)
-}
-
-// Validator defines an interface for validating a proof and returning a verified user.
-type Validator[U, P any] interface {
-	Validate(ctx context.Context, proof P) (Verified[U], error)
+// UserRegisterer defines a contract for registering new users.
+type UserRegisterer[U any] interface {
+	Register(context.Context, U) (U, error)
 }
 
 // LoginHandler defines an interface for logging in a user and returning a session ID.

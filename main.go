@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/gelozr/himo/auth"
 )
@@ -62,13 +63,51 @@ func (s sessionDriver) Logout(ctx context.Context, sessionID string) error {
 func main() {
 	ctx := context.Background()
 	a := auth.New()
-	// option := auth.HandlerOption{
-	// 	Driver:       sampleDriver{},
-	// 	UserProvider: sampleUserProvider{},
+	option := auth.HandlerOption{
+		Driver:       sampleDriver{},
+		UserProvider: sampleUserProvider{},
+	}
+
+	if err := a.Extend("test", option); err != nil {
+		panic(err)
+	}
+
+	user, err := auth.Register(ctx, &auth.User{Email: "test", Password: "123456"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(user)
+
+	user, err = auth.Authenticate(ctx, auth.PasswordCredentials{Email: "test", Password: "123456"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(user)
+
+	auth.UseDriver(auth.NewMemorySessionDriver())
+	auth.UseUserProvider(auth.NewMemoryUserProvider())
+
+	// token, err := auth.IssueToken(ctx, user)
+	// if err != nil {
+	// 	log.Fatal(err)
 	// }
-	//
-	// if err := a.Extend("test", option); err != nil {
-	// 	panic(err)
+	// fmt.Println(token)
+
+	sess, err := auth.Login(ctx, user)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(sess)
+
+	verified, err := auth.Validate(ctx, sess)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(verified.User)
+
+	// user, err = auth.Validate(ctx, token)
+	// if err != nil {
+	// 	log.Fatal(err)
 	// }
 
 	anyUser, err := a.Register(ctx, &auth.User{Email: "test", Password: "test"})
@@ -77,22 +116,26 @@ func main() {
 	}
 	fmt.Println(anyUser)
 
-	user, err := a.Authenticate(ctx, auth.PasswordCredentials{Email: "test", Password: "test"})
+	user, err = a.Authenticate(ctx, auth.PasswordCredentials{Email: "test", Password: "test"})
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(user)
 
-	// typedAuth := auth.NewDefaultAuth(typedUserProvider{}, typedDriver{})
-	// user, _ = typedAuth.Authenticate(ctx, passwordCredentials{username: "test", password: "test"})
+	typedAuth := auth.NewBaseAuth(typedUserProvider{}, typedDriver{})
+	user, _ = typedAuth.Authenticate(ctx, passwordCredentials{username: "test", password: "test"})
+
+	fmt.Println("typed", user)
 	//
-	// fmt.Println("typed", user)
-	//
-	// v, _ := typedAuth.Validate(ctx, "test")
-	// fmt.Println("typed", v)
-	//
-	// sessionAuth := auth.NewSessionAuth(&sessionDriver{}, &typedUserProvider{})
-	// user, sess, err := sessionAuth.Attempt(ctx, passwordCredentials{username: "test", password: "test"})
-	//
-	// fmt.Println("session", user, sess, err)
+	v, _ := typedAuth.Validate(ctx, "test")
+	fmt.Println("typed", v)
+
+	sessionAuth := auth.NewSessionAuth(&sessionDriver{}, &typedUserProvider{})
+	user, sess, err = sessionAuth.Attempt(ctx, passwordCredentials{username: "test", password: "test"})
+	user, err = sessionAuth.Validate(ctx, sess)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("session", user, sess, err)
 }

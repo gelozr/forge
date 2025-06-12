@@ -142,7 +142,7 @@ func (a *Manager) MustHandler(name string) AnyHandler {
 // The first handler registered becomes the default.
 func (a *Manager) Extend(name string, option HandlerOption) error {
 	if option.UserProvider == nil || option.Driver == nil {
-		panic("UserProvider or Driver cannot be nil")
+		panic("UserProvider or Validator cannot be nil")
 	}
 
 	a.mu.Lock()
@@ -174,9 +174,9 @@ func (a *Manager) SetDefault(name string) error {
 	return nil
 }
 
-// HandlerOption configures a handler by supplying a Driver and UserProvider.
+// HandlerOption configures a handler by supplying a Validator and UserProvider.
 type HandlerOption struct {
-	Driver       Driver[any, any]
+	Driver       Validator[any, any]
 	UserProvider UserProvider[any, any]
 }
 
@@ -270,8 +270,8 @@ func SetDefault(name string) error {
 	return getManager().SetDefault(name)
 }
 
-// UseDriver replaces the Driver on the default handler (preserving user provider).
-func UseDriver(driver Driver[any, any]) {
+// UseDriver replaces the Validator on the default handler (preserving user provider).
+func UseDriver(driver Validator[any, any]) {
 	m := getManager()
 
 	m.mu.Lock()
@@ -297,7 +297,7 @@ func UseUserProvider(provider UserProvider[any, any]) {
 // handler is the untyped implementation of AnyHandler that Manager uses
 // to delegate Authenticate, Validate, and other optional methods.
 type handler struct {
-	driver       Driver[any, any]
+	driver       Validator[any, any]
 	userProvider UserProvider[any, any]
 }
 
