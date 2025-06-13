@@ -76,9 +76,9 @@ func (p *MemoryUserProvider) GetByEmail(email string) (*User, error) {
 	return nil, ErrUserNotFound
 }
 
-// Register creates a new user with a generated ID and stores it in memory.
+// RegisterUser creates a new user with a generated ID and stores it in memory.
 // Expects user of type *User, returns any to satisfy AnyHandler.
-func (p *MemoryUserProvider) Register(ctx context.Context, user any) (any, error) {
+func (p *MemoryUserProvider) RegisterUser(ctx context.Context, user any) (any, error) {
 	u, ok := user.(*User)
 	if !ok {
 		return nil, errors.New("invalid user type")

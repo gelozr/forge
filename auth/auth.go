@@ -10,6 +10,7 @@ import (
 // Common errors returned by Manager when operations are unsupported
 var (
 	ErrHandlerNotFound          = errors.New("handler not found")
+	ErrHandlerAlreadyRegistered = errors.New("handler already registered")
 	ErrRegisterUserNotSupported = errors.New("register user not supported")
 	ErrLoginNotSupported        = errors.New("login not supported")
 	ErrLogoutNotSupported       = errors.New("logout not supported")
@@ -60,10 +61,10 @@ func New(option ...HandlerOption) *Manager {
 	return m
 }
 
-// Register delegates user registration to the default handler if supported.
-func (a *Manager) Register(ctx context.Context, user any) (any, error) {
+// RegisterUser delegates user registration to the default handler if supported.
+func (a *Manager) RegisterUser(ctx context.Context, user any) (any, error) {
 	if h, ok := a.MustHandler(a.defaultHandler).(UserRegisterer[any]); ok {
-		return h.Register(ctx, user)
+		return h.RegisterUser(ctx, user)
 	}
 
 	return nil, ErrRegisterUserNotSupported
@@ -145,6 +146,26 @@ func (a *Manager) MustHandler(name string) AnyHandler {
 	panic(fmt.Sprintf("handler '%s' not found", name))
 }
 
+// RegisterHandler registers a new handler under the given name.
+// The first handler registered becomes the default and will return an error
+// if the handler name already exists.
+func (a *Manager) RegisterHandler(name string, handler AnyHandler) error {
+	if _, ok := a.handlers[name]; ok {
+		return fmt.Errorf("%w: %s", ErrHandlerAlreadyRegistered, name)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// set the first handler as default
+	if len(a.handlers) == 0 {
+		a.defaultHandler = name
+	}
+
+	a.handlers[name] = handler
+	return nil
+}
+
 // Extend registers or replaces a handler under the given name.
 // The first handler registered becomes the default.
 func (a *Manager) Extend(name string, option HandlerOption) error {
@@ -194,21 +215,6 @@ type HandlerOption struct {
 	UserProvider UserProvider[any, any]
 }
 
-// ctxKey is a private type for context keys in this package.
-type ctxKey string
-
-var userCtxKey = ctxKey("user")
-
-// WithUserCtx stores the authenticated user in the context.
-func WithUserCtx(ctx context.Context, user any) context.Context {
-	return context.WithValue(ctx, userCtxKey, user)
-}
-
-// UserFromCtx retrieves the authenticated user from the context.
-func UserFromCtx(ctx context.Context) any {
-	return ctx.Value(userCtxKey)
-}
-
 var (
 	defaultAuth *Manager
 	once        sync.Once
@@ -224,9 +230,9 @@ func getManager() *Manager {
 
 // Package-level convenience functions (facade) using the default Manager:
 
-// Register registers a new user using the default handler.
-func Register(ctx context.Context, user any) (any, error) {
-	return getManager().Register(ctx, user)
+// RegisterUser registers a new user using the default handler.
+func RegisterUser(ctx context.Context, user any) (any, error) {
+	return getManager().RegisterUser(ctx, user)
 }
 
 // Authenticate authenticates credentials using the default handler.
@@ -272,6 +278,11 @@ func LookupHandler(name string) (AnyHandler, error) {
 // MustHandler finds a named handler or panics if not present.
 func MustHandler(name string) AnyHandler {
 	return getManager().MustHandler(name)
+}
+
+// RegisterHandler registers a new named handler on the default Manager
+func RegisterHandler(name string, handler AnyHandler) error {
+	return getManager().RegisterHandler(name, handler)
 }
 
 // Extend registers or replaces a named handler on the default Manager.
@@ -325,9 +336,9 @@ var (
 	_ TokenRevoker          = (*handler)(nil)
 )
 
-func (h *handler) Register(ctx context.Context, user any) (any, error) {
+func (h *handler) RegisterUser(ctx context.Context, user any) (any, error) {
 	if d, ok := h.userProvider.(UserRegisterer[any]); ok {
-		return d.Register(ctx, user)
+		return d.RegisterUser(ctx, user)
 	}
 	return nil, ErrRegisterUserNotSupported
 }

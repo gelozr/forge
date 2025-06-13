@@ -23,7 +23,7 @@ type Validator[U, P any] interface {
 
 // UserRegisterer defines a contract for registering new users.
 type UserRegisterer[U any] interface {
-	Register(context.Context, U) (U, error)
+	RegisterUser(context.Context, U) (U, error)
 }
 
 // LoginHandler defines an interface for logging in a user and returning a session ID.
