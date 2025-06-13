@@ -19,14 +19,21 @@ var (
 )
 
 // Manager orchestrates one or more named authentication handlers.
-// It implements the Auth interface.
 type Manager struct {
 	mu             sync.RWMutex
 	handlers       map[string]AnyHandler
 	defaultHandler string
 }
 
-var _ Auth = (*Manager)(nil)
+var (
+	_ AnyHandler            = (*Manager)(nil)
+	_ UserRegisterer[any]   = (*Manager)(nil)
+	_ LoginHandler[any]     = (*Manager)(nil)
+	_ LogoutHandler         = (*Manager)(nil)
+	_ TokenIssuer[any, any] = (*Manager)(nil)
+	_ TokenRefresher[any]   = (*Manager)(nil)
+	_ TokenRevoker          = (*Manager)(nil)
+)
 
 // New creates a Manager and registers a "default" handler.
 // Optionally accepts a HandlerOption to override the default driver or user provider.
@@ -172,6 +179,13 @@ func (a *Manager) SetDefault(name string) error {
 
 	a.defaultHandler = name
 	return nil
+}
+
+// Verified holds the result of a successful proof validation,
+// containing the authenticated user and optional permissions.
+type Verified[U any] struct {
+	User        U
+	Permissions []string
 }
 
 // HandlerOption configures a handler by supplying a Validator and UserProvider.
